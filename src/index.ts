@@ -10,6 +10,8 @@ const options = {
   password: process.env.MCBOT_PASSWORD,
   auth: process.env.MCBOT_AUTH,
 }
+
+import {Player} from 'mineflayer';
 import {
   StateTransition,
   BotStateMachine,
@@ -22,6 +24,7 @@ import {
   StateMachineTargets,
 } from 'mineflayer-statemachine';
 const {BehaviorFollowPlayerEntity} = require("./behaviors");
+import {OrderFollowPlayer} from "./orders";
 
 console.log(process.env.MCBOT_HOST);
 const bot = mineflayer.createBot(options);
@@ -30,6 +33,10 @@ bot.on('kicked', console.log);
 bot.on('error', console.log);
 bot.loadPlugin(pathfinder);
 bot.loadPlugin(pvp);
+
+export interface OrderedStateMachineTargets extends StateMachineTargets{
+  player?: Player
+}
 
 bot.once('spawn', () => {
   //    mineflayerViewer(bot, { port: 3007, firstPerson: true }) // port is the minecraft server port, if first person is false, you get a bird's-eye view
@@ -44,8 +51,7 @@ bot.once('spawn', () => {
   const targets: StateMachineTargets = {};
   const idleState = new BehaviorIdle();
   const getClosestPlayer = new BehaviorGetClosestEntity(bot, targets, EntityFilters().PlayersOnly);
-  const lookAtPlayersState = new BehaviorLookAtEntity(bot, targets);
-  const followPlayerState = new BehaviorFollowPlayerEntity(bot, targets);
+  const followPlayerState = new OrderFollowPlayer(bot, targets);
 
   const transitions = [
     new StateTransition({
@@ -62,7 +68,7 @@ bot.once('spawn', () => {
   bot.on('whisper', (username: string, message: string) => {
     if(messageIsValid(username, message)) {
       if (message === "follow me") {
-        targets["entity"] = bot.players[username].entity
+        targets["player"] = bot.players[username]
         transitions[0].trigger();
       } else if(message === "stay here") {
         transitions[1].trigger();
