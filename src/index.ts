@@ -10,15 +10,18 @@ const options = {
   password: process.env.MCBOT_PASSWORD,
   auth: process.env.MCBOT_AUTH,
 }
-const {
+import {
   StateTransition,
   BotStateMachine,
   BehaviorIdle,
   BehaviorGetClosestEntity,
   BehaviorLookAtEntity,
+  BehaviorFollowEntity,
   EntityFilters,
   NestedStateMachine,
-} = require('mineflayer-statemachine');
+  StateMachineTargets,
+} from 'mineflayer-statemachine';
+const {BehaviorFollowPlayerEntity} = require("./behaviors");
 
 console.log(process.env.MCBOT_HOST);
 const bot = mineflayer.createBot(options);
@@ -38,24 +41,20 @@ bot.once('spawn', () => {
   defaultMove.canOpenDoors;
   bot.pathfinder.setMovements(defaultMove)
 
-  const targets = {};
+  const targets: StateMachineTargets = {};
   const idleState = new BehaviorIdle();
   const getClosestPlayer = new BehaviorGetClosestEntity(bot, targets, EntityFilters().PlayersOnly);
   const lookAtPlayersState = new BehaviorLookAtEntity(bot, targets);
+  const followPlayerState = new BehaviorFollowPlayerEntity(bot, targets);
 
   const transitions = [
     new StateTransition({
       parent: idleState,
-      child: getClosestPlayer,
+      child: followPlayerState,
       onTransition: () => bot.chat('hello')
     }),
-    new StateTransition( {
-      parent: getClosestPlayer,
-      child: lookAtPlayersState,
-      onTransition: () => true
-    }),
     new StateTransition({
-      parent: lookAtPlayersState,
+      parent: followPlayerState,
       child: idleState,
       onTransition: () => bot.chat('goodby')
     }),
@@ -63,9 +62,12 @@ bot.once('spawn', () => {
   bot.on('whisper', (username: string, message: string) => {
     if(messageIsValid(username, message)) {
       if (message === "follow me") {
+        targets["entity"] = bot.players[username].entity
         transitions[0].trigger();
       } else if(message === "stay here") {
-        transitions[2].trigger();
+        transitions[1].trigger();
+      } else if (message === "where are you?") {
+        bot.whisper(username, "I am at " + bot.entity.position)
       }
     }
   });

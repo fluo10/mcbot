@@ -3,6 +3,7 @@ A minecraft bodyguard bot.
 
 ## Features
 
-- [ ] Follow Owner
+- [x] Follow User
 - [ ] Attack Enemy
-- [ ] Go To Bed
+- [ ] Go To Bed if needed
+- [ ] 
