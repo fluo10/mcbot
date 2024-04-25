@@ -23,8 +23,9 @@ import {
   NestedStateMachine,
   StateMachineTargets,
 } from 'mineflayer-statemachine';
-const {BehaviorFollowPlayerEntity} = require("./behaviors");
-import {OrderFollowPlayer} from "./orders";
+import {AttackEntityPhase, FollowPlayerPhase} from "./phases";
+import { Entity } from 'prismarine-entity'
+const minecraftHawkEye = require('minecrafthawkeye');
 
 console.log(process.env.MCBOT_HOST);
 const bot = mineflayer.createBot(options);
@@ -33,6 +34,7 @@ bot.on('kicked', console.log);
 bot.on('error', console.log);
 bot.loadPlugin(pathfinder);
 bot.loadPlugin(pvp);
+bot.loadPlugin(minecraftHawkEye.default);
 
 export interface OrderedStateMachineTargets extends StateMachineTargets{
   player?: Player
@@ -51,30 +53,84 @@ bot.once('spawn', () => {
   const targets: StateMachineTargets = {};
   const idleState = new BehaviorIdle();
   const getClosestPlayer = new BehaviorGetClosestEntity(bot, targets, EntityFilters().PlayersOnly);
-  const followPlayerState = new OrderFollowPlayer(bot, targets);
+  const followPlayerState = new FollowPlayerPhase(bot, targets);
+  const attackEntityState = new AttackEntityPhase(bot, targets, 1200);
+  const attackPlayerState = new AttackEntityPhase(bot, targets, 200);
 
-  const transitions = [
-    new StateTransition({
+    const idleToFollowPlayerStateTransition = new StateTransition({
       parent: idleState,
       child: followPlayerState,
-      onTransition: () => bot.chat('hello')
-    }),
-    new StateTransition({
+      onTransition: () => {
+        bot.chat('hello');
+        console.log("Transit State from Idle to FollowPlayer.");
+      },
+    });
+
+    const followPlayerToIdleStateTransition = new StateTransition({
       parent: followPlayerState,
       child: idleState,
-      onTransition: () => bot.chat('goodby')
-    }),
+      onTransition: () => {
+      bot.chat('goodby')
+      console.log("Transit State from FollowPlayer to Idle.")
+      },
+    });
+    const followPlayerToAttackEntityStateTransition = new StateTransition({
+      parent: followPlayerState,
+      child: attackEntityState,
+        onTransition: () => console.log("Transit State from FollowPlayer to AttackEntity.")
+    });
+    const idleToAttackEntityStateTransition = new StateTransition({
+      parent: idleState,
+      child: attackEntityState,
+        onTransition: () => console.log("Transit State from Idle to AttackEntity.")
+    });
+    const attackEntityToFollowPlayerStateTransition = new StateTransition({
+      parent: attackEntityState,
+      child: followPlayerState,
+      shouldTransition: () => attackEntityState.shouldEnd() && !!targets.player,
+        onTransition: () => console.log("Transit State from AttackEntity to FollowPlayer.")
+    });
+    const attackEntityToIdleStateTransition = new StateTransition({
+      parent: attackEntityState,
+      child: idleState,
+      shouldTransition: () => attackEntityState.shouldEnd() && !targets.player ,
+        onTransition: () => console.log("Transit State from AttackEntity to Idle.")
+    });
+  const transitions = [
+    idleToFollowPlayerStateTransition, 
+    followPlayerToIdleStateTransition, 
+    followPlayerToAttackEntityStateTransition, 
+    idleToAttackEntityStateTransition,
+    attackEntityToFollowPlayerStateTransition,
+    attackEntityToIdleStateTransition,
   ]
+
   bot.on('whisper', (username: string, message: string) => {
     if(messageIsValid(username, message)) {
       if (message === "follow me") {
         targets["player"] = bot.players[username]
-        transitions[0].trigger();
+        attackEntityToFollowPlayerStateTransition.trigger();
+        idleToFollowPlayerStateTransition.trigger();
       } else if(message === "stay here") {
-        transitions[1].trigger();
+        attackEntityToIdleStateTransition.trigger();
+        followPlayerToIdleStateTransition.trigger();
       } else if (message === "where are you?") {
         bot.whisper(username, "I am at " + bot.entity.position)
       }
+    }
+  });
+  bot.on("entityHurt", (entity: Entity) => {
+    console.log("Saw entity hurt: " + entity);
+    if (entity.type === "mob") {
+      targets.entity = entity;
+      idleToAttackEntityStateTransition.trigger();
+      followPlayerToAttackEntityStateTransition.trigger();
+    } else if (entity.type === "player" && entity.id == bot.entity.id ){
+      targets.entity = bot.nearestEntity( (entity: Entity) => {
+        return entity.type === "mob"
+      });
+      idleToAttackEntityStateTransition.trigger();
+      followPlayerToAttackEntityStateTransition.trigger();
     }
   });
   const rootLayer = new NestedStateMachine(transitions, idleState);

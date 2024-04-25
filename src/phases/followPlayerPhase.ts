@@ -6,7 +6,7 @@ import { BehaviorLookAtEntity, NestedStateMachine,  StateMachineTargets, StateTr
 import { BehaviorFollowPlayer} from '../behaviors';
 import { OrderedStateMachineTargets } from '..';
 
-export class OrderFollowPlayer extends NestedStateMachine {
+export class FollowPlayerPhase extends NestedStateMachine {
   readonly bot: Bot;
   readonly targets: OrderedStateMachineTargets;
   readonly loop: boolean;
